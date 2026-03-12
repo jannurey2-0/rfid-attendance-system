@@ -1,0 +1,190 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Teacher Dashboard</title>
+<link rel="stylesheet" href="../assets/css/style.css">
+</head>
+
+<body>
+
+<div class="topbar">
+  <div class="topbar-inner">
+    <div class="brand">RFID Attendance System</div>
+
+    <div class="topbar-right">
+      <span id="teacherName">Teacher</span>
+      <button class="secondary small" onclick="handleLogout()">Logout</button>
+    </div>
+  </div>
+</div>
+
+
+<div class="container">
+
+  <div class="page-header">
+    <div>
+      <h1>Teacher Dashboard</h1>
+      <p class="page-subtitle">
+        Manage your classes, students, and classroom attendance sessions.
+      </p>
+    </div>
+  </div>
+
+
+  <!-- Welcome Panel -->
+
+  <div class="highlight-panel">
+    <h2 id="welcomeTitle">Welcome Teacher</h2>
+    <p>
+      This dashboard allows you to manage your teaching workflow.  
+      You can create subjects, register students, assign RFID cards,
+      and run live attendance sessions using RFID scans.
+    </p>
+  </div>
+
+
+  <!-- Quick Stats -->
+
+  <div class="stats-grid" style="margin-top:20px;">
+
+    <div class="stat-box">
+      <div class="stat-label">Subjects</div>
+      <div class="stat-value">Manage</div>
+    </div>
+
+    <div class="stat-box">
+      <div class="stat-label">Students</div>
+      <div class="stat-value">Register</div>
+    </div>
+
+    <div class="stat-box">
+      <div class="stat-label">Attendance</div>
+      <div class="stat-value">Track</div>
+    </div>
+
+  </div>
+
+
+  <!-- Quick Navigation -->
+
+  <div class="card" style="margin-top:20px;">
+    <h2>Quick Navigation</h2>
+
+    <div class="nav-links">
+
+      <a href="subjects.html" class="nav-card">
+        <div class="nav-card-title">Subjects</div>
+        <div class="nav-card-text">
+          Create and manage the subjects you teach.
+        </div>
+      </a>
+
+      <a href="students.html" class="nav-card">
+        <div class="nav-card-title">Students</div>
+        <div class="nav-card-text">
+          Register students, assign RFID cards, and enroll them in your subjects.
+        </div>
+      </a>
+
+      <a href="attendance.html" class="nav-card">
+        <div class="nav-card-title">Attendance</div>
+        <div class="nav-card-text">
+          Start attendance sessions and monitor live RFID scans.
+        </div>
+      </a>
+
+    </div>
+  </div>
+
+
+  <!-- Workflow Guide -->
+
+  <div class="grid-2">
+
+    <div class="card">
+      <h2>Teacher Workflow</h2>
+
+      <ol style="line-height:1.8; padding-left:20px;">
+
+        <li>Create your teaching subjects.</li>
+
+        <li>Add your students to the system.</li>
+
+        <li>Assign RFID cards to each student.</li>
+
+        <li>Enroll students to their subject.</li>
+
+        <li>Start an attendance session.</li>
+
+        <li>Students scan their RFID cards.</li>
+
+        <li>The system records attendance automatically.</li>
+
+      </ol>
+
+    </div>
+
+
+    <div class="card">
+      <h2>System Features</h2>
+
+      <ul style="line-height:1.8; padding-left:20px;">
+
+        <li>RFID-based student identification</li>
+
+        <li>Live classroom attendance monitoring</li>
+
+        <li>Secure teacher login (Email or RFID)</li>
+
+        <li>Automatic attendance records</li>
+
+        <li>Subject and student management</li>
+
+        <li>Designed for scalability and reliability</li>
+
+      </ul>
+
+    </div>
+
+  </div>
+
+
+</div>
+
+
+<script src="../assets/js/api.js"></script>
+<script src="../assets/js/session.js"></script>
+<script src="../assets/js/utils.js"></script>
+<script src="../js/debug.js"></script>
+
+<script>
+
+function handleLogout(){
+  logout()
+}
+
+function initPage(){
+
+  const profile = getProfile()
+
+  if(!profile || profile.role !== "teacher"){
+    window.location.href = "../login.html"
+    return
+  }
+
+  document.getElementById("teacherName").textContent =
+    `${profile.first_name} ${profile.last_name}`
+
+  document.getElementById("welcomeTitle").textContent =
+    `Welcome ${profile.first_name}!`
+
+}
+
+initPage()
+
+</script>
+
+</body>
+</html>

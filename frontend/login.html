@@ -1,0 +1,89 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>RFID Attendance System - Login</title>
+  <link rel="stylesheet" href="assets/css/style.css" />
+</head>
+<body>
+  <div class="login-wrapper">
+    <div class="login-layout">
+      <div class="login-hero">
+        <h1>RFID Attendance System</h1>
+        <p>
+          A smart and efficient attendance platform for teachers and administrators.
+          Manage subjects, students, RFID cards, and classroom attendance from one dashboard.
+        </p>
+      </div>
+
+      <div class="login-card">
+        <h2 style="margin-bottom: 14px;">Login</h2>
+
+        <label for="email">Email</label>
+        <input type="email" id="email" placeholder="Enter your email" />
+
+        <label for="password">Password</label>
+        <input type="password" id="password" placeholder="Enter your password" />
+
+        <button onclick="handleEmailLogin()">Login with Email</button>
+
+        <div class="section-divider"></div>
+
+        <h3 style="margin-bottom: 10px;">RFID Login</h3>
+        <label for="uid">RFID UID</label>
+        <input type="text" id="uid" placeholder="Scan or enter RFID UID" />
+        <button class="secondary" onclick="handleRfidLogin()">Login with RFID</button>
+
+        <div id="messageBox" class="message"></div>
+      </div>
+    </div>
+  </div>
+
+  <script src="assets/js/api.js"></script>
+  <script src="assets/js/session.js"></script>
+  <script src="assets/js/utils.js"></script>
+  <script src="assets/js/auth.js"></script>
+
+  <script>
+    async function handleEmailLogin() {
+      clearMessage('messageBox');
+
+      const email = document.getElementById('email').value.trim();
+      const password = document.getElementById('password').value.trim();
+
+      if (!email || !password) {
+        showMessage('messageBox', 'Email and password are required.', 'error');
+        return;
+      }
+
+      try {
+        const result = await loginWithEmail(email, password);
+        showMessage('messageBox', result.message, 'success');
+        redirectByRole(result.data.profile);
+      } catch (error) {
+        showMessage('messageBox', error.message || 'Login failed.', 'error');
+      }
+    }
+
+    async function handleRfidLogin() {
+      clearMessage('messageBox');
+
+      const uid = document.getElementById('uid').value.trim();
+
+      if (!uid) {
+        showMessage('messageBox', 'RFID UID is required.', 'error');
+        return;
+      }
+
+      try {
+        const result = await loginWithRfid(uid);
+        showMessage('messageBox', result.message, 'success');
+        redirectByRole(result.data.profile);
+      } catch (error) {
+        showMessage('messageBox', error.message || 'RFID login failed.', 'error');
+      }
+    }
+  </script>
+</body>
+</html>

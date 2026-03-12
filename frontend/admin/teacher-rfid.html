@@ -1,0 +1,153 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Assign Teacher RFID</title>
+  <link rel="stylesheet" href="../assets/css/style.css" />
+</head>
+<body>
+  <div class="topbar">
+    <div class="topbar-inner">
+      <div class="brand">RFID Attendance System</div>
+      <div class="topbar-right">
+        <span id="adminName">Admin</span>
+        <button class="secondary small" onclick="goBack()">Back</button>
+      </div>
+    </div>
+  </div>
+
+  <div class="container">
+    <div class="page-header">
+      <div>
+        <h1>Assign Teacher RFID</h1>
+        <p class="page-subtitle">Register RFID cards for teachers and view assignment status.</p>
+      </div>
+    </div>
+
+    <div class="card">
+      <h2>Teacher RFID List</h2>
+      <p class="page-subtitle">Use the Assign RFID button to register a card for a teacher.</p>
+
+      <div id="messageBox" class="message"></div>
+
+      <div class="button-row">
+        <button onclick="loadTeacherRfid()">Refresh List</button>
+        <button class="secondary" onclick="goBack()">Back to Dashboard</button>
+      </div>
+
+      <div class="table-container">
+        <table>
+          <thead>
+            <tr>
+              <th>Employee No</th>
+              <th>Name</th>
+              <th>Email</th>
+              <th>Department</th>
+              <th>RFID UID</th>
+              <th>Action</th>
+            </tr>
+          </thead>
+          <tbody id="teacherRfidTableBody">
+            <tr>
+              <td colspan="6">Loading teacher RFID list...</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+
+  <script src="../assets/js/api.js"></script>
+  <script src="../assets/js/session.js"></script>
+  <script src="../assets/js/utils.js"></script>
+
+  <script>
+    function requireAdminPage() {
+      const profile = getProfile();
+
+      if (!profile || profile.role !== 'admin') {
+        window.location.href = '../login.html';
+        return;
+      }
+
+      document.getElementById('adminName').textContent =
+        `${profile.first_name} ${profile.last_name}`;
+    }
+
+    function goBack() {
+      window.location.href = 'dashboard.html';
+    }
+
+    function renderTeacherRfid(data) {
+      const tableBody = document.getElementById('teacherRfidTableBody');
+
+      if (!data || data.length === 0) {
+        tableBody.innerHTML = `
+          <tr>
+            <td colspan="6">No teachers found.</td>
+          </tr>
+        `;
+        return;
+      }
+
+      tableBody.innerHTML = data.map(item => {
+        const profile = item.profile || {};
+        const fullName = `${profile.first_name || ''} ${profile.middle_name || ''} ${profile.last_name || ''}`.replace(/\s+/g, ' ').trim();
+        const rfidUid = item.rfid_card ? item.rfid_card.uid : 'Not Assigned';
+
+        return `
+          <tr>
+            <td>${item.employee_no || ''}</td>
+            <td>${fullName}</td>
+            <td>${profile.email || ''}</td>
+            <td>${item.department || ''}</td>
+            <td>${rfidUid}</td>
+            <td>
+              <div class="table-actions">
+                <button class="small" onclick="assignTeacherRfid('${item.teacher_id}')">Assign RFID</button>
+              </div>
+            </td>
+          </tr>
+        `;
+      }).join('');
+    }
+
+    async function loadTeacherRfid() {
+      clearMessage('messageBox');
+
+      const token = getAccessToken();
+
+      try {
+        const result = await getRequest('/rfid/teachers', token);
+        renderTeacherRfid(result.data);
+      } catch (error) {
+        showMessage('messageBox', error.message || 'Failed to load teacher RFID list.', 'error');
+      }
+    }
+
+    async function assignTeacherRfid(teacherId) {
+      const uid = prompt('Scan or enter RFID UID for teacher');
+
+      if (!uid) return;
+
+      const token = getAccessToken();
+
+      try {
+        const result = await postRequest('/rfid/teachers/assign', {
+          teacher_id: teacherId,
+          uid: uid.trim()
+        }, token);
+
+        showMessage('messageBox', result.message, 'success');
+        loadTeacherRfid();
+      } catch (error) {
+        showMessage('messageBox', error.message || 'Failed to assign teacher RFID.', 'error');
+      }
+    }
+
+    requireAdminPage();
+    loadTeacherRfid();
+  </script>
+</body>
+</html>

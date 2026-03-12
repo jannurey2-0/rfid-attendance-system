@@ -1,0 +1,365 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Teacher Attendance</title>
+  <link rel="stylesheet" href="../assets/css/style.css" />
+</head>
+<body>
+  <div class="topbar">
+    <div class="topbar-inner">
+      <div class="brand">RFID Attendance System</div>
+      <div class="topbar-right">
+        <span id="teacherName">Teacher</span>
+        <button class="secondary small" onclick="goBack()">Back</button>
+      </div>
+    </div>
+  </div>
+
+  <div class="container">
+    <div class="page-header">
+      <div>
+        <h1>Attendance Console</h1>
+        <p class="page-subtitle">Start sessions, monitor live scans, and manage classroom attendance.</p>
+      </div>
+    </div>
+
+    <div class="grid-2">
+      <div class="card">
+        <h2>Start Attendance Session</h2>
+
+        <label for="subjectSelect">Subject</label>
+        <select id="subjectSelect">
+          <option value="">Select Subject</option>
+        </select>
+
+        <label for="modeSelect">Mode</label>
+        <select id="modeSelect">
+          <option value="class_attendance">Class Attendance</option>
+          <option value="time_in">Time In</option>
+          <option value="time_out">Time Out</option>
+        </select>
+
+        <div class="button-row">
+          <button onclick="startSession()">Start Session</button>
+          <button class="secondary" onclick="goBack()">Back to Dashboard</button>
+        </div>
+
+        <div id="messageBox" class="message"></div>
+      </div>
+
+      <div class="highlight-panel">
+        <h2>Scanner Status</h2>
+        <p>This page auto-refreshes every 3 seconds while a session is active.</p>
+        <p style="margin-top: 10px;">Once your ESP32 starts sending scans, new attendance records will appear below automatically.</p>
+      </div>
+    </div>
+
+    <div class="grid-2">
+      <div class="card">
+        <h2>Active Session</h2>
+        <div id="activeSessionBox" class="session-box">
+          <p>No active session.</p>
+        </div>
+      </div>
+
+      <div class="card">
+        <h2>Last Scan Overview</h2>
+        <div id="lastScanBox" class="last-scan-box">
+          <div class="empty-state">No scans recorded yet.</div>
+        </div>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="page-header" style="margin-bottom: 0;">
+        <div>
+          <h2>Attendance Records</h2>
+          <p class="page-subtitle">Live classroom scan history for the active session.</p>
+        </div>
+        <button onclick="loadSessionRecords()">Refresh Records</button>
+      </div>
+
+      <div class="table-container">
+        <table>
+          <thead>
+            <tr>
+              <th>Student No</th>
+              <th>Name</th>
+              <th>Year</th>
+              <th>Section</th>
+              <th>Status</th>
+              <th>Scan Time</th>
+            </tr>
+          </thead>
+          <tbody id="recordsTableBody">
+            <tr>
+              <td colspan="6">No attendance records yet.</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+
+  <script src="../assets/js/api.js"></script>
+  <script src="../assets/js/session.js"></script>
+  <script src="../assets/js/utils.js"></script>
+
+  <script>
+    let activeSessionId = null;
+    let activeSessionData = null;
+    let pollingInterval = null;
+
+    function requireTeacherPage() {
+      const profile = getProfile();
+
+      if (!profile || profile.role !== 'teacher') {
+        window.location.href = '../login.html';
+        return null;
+      }
+
+      document.getElementById('teacherName').textContent =
+        `${profile.first_name} ${profile.last_name}`;
+
+      return profile;
+    }
+
+    function goBack() {
+      window.location.href = 'dashboard.html';
+    }
+
+    async function loadSubjectsForSelect() {
+      const token = getAccessToken();
+
+      try {
+        const result = await getRequest('/subjects/my-subjects', token);
+        const subjects = result.data || [];
+        const select = document.getElementById('subjectSelect');
+
+        select.innerHTML = `<option value="">Select Subject</option>`;
+
+        subjects.forEach(subject => {
+          const option = document.createElement('option');
+          option.value = subject.id;
+          option.textContent = `${subject.subject_code} - ${subject.subject_name} (${subject.section || 'No Section'})`;
+          select.appendChild(option);
+        });
+      } catch (error) {
+        showMessage('messageBox', error.message || 'Failed to load subjects.', 'error');
+      }
+    }
+
+    function renderActiveSession(session) {
+      const box = document.getElementById('activeSessionBox');
+
+      if (!session) {
+        box.innerHTML = `<p>No active session.</p>`;
+        activeSessionId = null;
+        activeSessionData = null;
+        return;
+      }
+
+      activeSessionId = session.id;
+      activeSessionData = session;
+
+      const subject = session.subjects || {};
+
+      box.innerHTML = `
+        <div class="session-grid">
+          <div class="session-item">
+            <span>Session ID</span>
+            <strong>${session.id}</strong>
+          </div>
+          <div class="session-item">
+            <span>Mode</span>
+            <strong>${session.mode}</strong>
+          </div>
+          <div class="session-item">
+            <span>Subject</span>
+            <strong>${subject.subject_code || ''} - ${subject.subject_name || ''}</strong>
+          </div>
+          <div class="session-item">
+            <span>Section</span>
+            <strong>${subject.section || ''}</strong>
+          </div>
+          <div class="session-item">
+            <span>Started</span>
+            <strong>${new Date(session.start_time).toLocaleString()}</strong>
+          </div>
+          <div class="session-item">
+            <span>Status</span>
+            <strong><span class="badge">ACTIVE</span></strong>
+          </div>
+        </div>
+        <div class="button-row" style="margin-top: 14px;">
+          <button onclick="endSession()">End Session</button>
+        </div>
+      `;
+    }
+
+    async function loadActiveSession() {
+      const token = getAccessToken();
+
+      try {
+        const result = await getRequest('/attendance/sessions/my-active', token);
+        const sessions = result.data || [];
+
+        if (sessions.length > 0) {
+          renderActiveSession(sessions[0]);
+          await loadSessionRecords();
+        } else {
+          renderActiveSession(null);
+          renderRecords([]);
+          renderLastScan(null);
+        }
+      } catch (error) {
+        showMessage('messageBox', error.message || 'Failed to load active session.', 'error');
+      }
+    }
+
+    async function startSession() {
+      clearMessage('messageBox');
+
+      const token = getAccessToken();
+      const subject_id = document.getElementById('subjectSelect').value;
+      const mode = document.getElementById('modeSelect').value;
+
+      if (!subject_id) {
+        showMessage('messageBox', 'Please select a subject.', 'error');
+        return;
+      }
+
+      try {
+        const result = await postRequest('/attendance/sessions/start', {
+          subject_id,
+          mode
+        }, token);
+
+        showMessage('messageBox', result.message, 'success');
+        await loadActiveSession();
+        startPolling();
+      } catch (error) {
+        showMessage('messageBox', error.message || 'Failed to start session.', 'error');
+      }
+    }
+
+    async function endSession() {
+      clearMessage('messageBox');
+
+      const token = getAccessToken();
+
+      if (!activeSessionId) {
+        showMessage('messageBox', 'No active session to end.', 'error');
+        return;
+      }
+
+      try {
+        const result = await postRequest(`/attendance/sessions/${activeSessionId}/end`, {}, token);
+        showMessage('messageBox', result.message, 'success');
+        stopPolling();
+        await loadActiveSession();
+      } catch (error) {
+        showMessage('messageBox', error.message || 'Failed to end session.', 'error');
+      }
+    }
+
+    function renderLastScan(record) {
+      const box = document.getElementById('lastScanBox');
+
+      if (!record) {
+        box.innerHTML = `<div class="empty-state">No scans recorded yet.</div>`;
+        return;
+      }
+
+      const student = record.students || {};
+      const profile = student.profiles || {};
+      const fullName = `${profile.first_name || ''} ${profile.middle_name || ''} ${profile.last_name || ''}`.replace(/\s+/g, ' ').trim();
+
+      box.innerHTML = `
+        <h3 style="margin-bottom: 12px;">Latest Attendance</h3>
+        <p><strong>Name:</strong> ${fullName}</p>
+        <p><strong>Student No:</strong> ${student.student_no || ''}</p>
+        <p><strong>Year / Section:</strong> ${student.year_level || ''} - ${student.section || ''}</p>
+        <p><strong>Status:</strong> ${record.attendance_status || ''}</p>
+        <p><strong>Scan Time:</strong> ${record.scan_time ? new Date(record.scan_time).toLocaleString() : ''}</p>
+      `;
+    }
+
+    function renderRecords(records) {
+      const tableBody = document.getElementById('recordsTableBody');
+
+      if (!records || records.length === 0) {
+        tableBody.innerHTML = `
+          <tr>
+            <td colspan="6">No attendance records yet.</td>
+          </tr>
+        `;
+        return;
+      }
+
+      tableBody.innerHTML = records.map(record => {
+        const student = record.students || {};
+        const profile = student.profiles || {};
+        const fullName = `${profile.first_name || ''} ${profile.middle_name || ''} ${profile.last_name || ''}`.replace(/\s+/g, ' ').trim();
+
+        return `
+          <tr>
+            <td>${student.student_no || ''}</td>
+            <td>${fullName}</td>
+            <td>${student.year_level || ''}</td>
+            <td>${student.section || ''}</td>
+            <td>${record.attendance_status || ''}</td>
+            <td>${record.scan_time ? new Date(record.scan_time).toLocaleString() : ''}</td>
+          </tr>
+        `;
+      }).join('');
+
+      renderLastScan(records[records.length - 1]);
+    }
+
+    async function loadSessionRecords() {
+      if (!activeSessionId) {
+        renderRecords([]);
+        return;
+      }
+
+      const token = getAccessToken();
+
+      try {
+        const result = await getRequest(`/attendance/sessions/${activeSessionId}/records`, token);
+        renderRecords(result.data.records || []);
+      } catch (error) {
+        showMessage('messageBox', error.message || 'Failed to load attendance records.', 'error');
+      }
+    }
+
+    function startPolling() {
+      stopPolling();
+      pollingInterval = setInterval(async () => {
+        await loadActiveSession();
+      }, 3000);
+    }
+
+    function stopPolling() {
+      if (pollingInterval) {
+        clearInterval(pollingInterval);
+        pollingInterval = null;
+      }
+    }
+
+    async function initPage() {
+      requireTeacherPage();
+      await loadSubjectsForSelect();
+      await loadActiveSession();
+
+      if (activeSessionId) {
+        startPolling();
+      }
+    }
+
+    initPage();
+  </script>
+</body>
+</html>

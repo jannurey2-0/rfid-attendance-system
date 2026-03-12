@@ -1,0 +1,220 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Manage Teachers</title>
+  <link rel="stylesheet" href="../assets/css/style.css" />
+</head>
+<body>
+  <div class="topbar">
+    <div class="topbar-inner">
+      <div class="brand">RFID Attendance System</div>
+      <div class="topbar-right">
+        <span id="adminName">Admin</span>
+        <button class="secondary small" onclick="goBack()">Back</button>
+      </div>
+    </div>
+  </div>
+
+  <div class="container">
+    <div class="page-header">
+      <div>
+        <h1>Manage Teachers</h1>
+        <p class="page-subtitle">Create teacher accounts and review registered teachers.</p>
+      </div>
+    </div>
+
+    <div class="grid-2">
+      <div class="card">
+        <h2>Create Teacher</h2>
+
+        <div class="form-grid">
+          <div>
+            <label for="first_name">First Name</label>
+            <input type="text" id="first_name" placeholder="First Name" />
+          </div>
+
+          <div>
+            <label for="middle_name">Middle Name</label>
+            <input type="text" id="middle_name" placeholder="Middle Name" />
+          </div>
+
+          <div>
+            <label for="last_name">Last Name</label>
+            <input type="text" id="last_name" placeholder="Last Name" />
+          </div>
+
+          <div>
+            <label for="employee_no">Employee Number</label>
+            <input type="text" id="employee_no" placeholder="Employee Number" />
+          </div>
+
+          <div>
+            <label for="email">Email</label>
+            <input type="email" id="email" placeholder="teacher@email.com" />
+          </div>
+
+          <div>
+            <label for="password">Password</label>
+            <input type="password" id="password" placeholder="Temporary Password" />
+          </div>
+
+          <div class="full-width">
+            <label for="department">Department</label>
+            <input type="text" id="department" placeholder="Department" />
+          </div>
+        </div>
+
+        <div class="button-row">
+          <button onclick="createTeacher()">Create Teacher</button>
+          <button class="secondary" onclick="goBack()">Back to Dashboard</button>
+        </div>
+
+        <div id="messageBox" class="message"></div>
+      </div>
+
+      <div class="card">
+        <h2>Teacher Account Notes</h2>
+        <div class="empty-state">
+          Use this page to create teacher login accounts. Once created, the teacher can
+          later be assigned an RFID card from the RFID page.
+        </div>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="page-header" style="margin-bottom:0;">
+        <div>
+          <h2>Teacher List</h2>
+          <p class="page-subtitle">All teachers currently registered in the system.</p>
+        </div>
+        <button onclick="loadTeachers()">Refresh Teachers</button>
+      </div>
+
+      <div class="table-container">
+        <table>
+          <thead>
+            <tr>
+              <th>Employee No</th>
+              <th>Name</th>
+              <th>Email</th>
+              <th>Department</th>
+              <th>Status</th>
+            </tr>
+          </thead>
+          <tbody id="teachersTableBody">
+            <tr>
+              <td colspan="5">Loading teachers...</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+
+  <script src="../assets/js/api.js"></script>
+  <script src="../assets/js/session.js"></script>
+  <script src="../assets/js/utils.js"></script>
+
+  <script>
+    function requireAdminPage() {
+      const profile = getProfile();
+
+      if (!profile || profile.role !== 'admin') {
+        window.location.href = '../login.html';
+        return;
+      }
+
+      document.getElementById('adminName').textContent =
+        `${profile.first_name} ${profile.last_name}`;
+    }
+
+    function goBack() {
+      window.location.href = 'dashboard.html';
+    }
+
+    function renderTeachers(teachers) {
+      const tableBody = document.getElementById('teachersTableBody');
+
+      if (!teachers || teachers.length === 0) {
+        tableBody.innerHTML = `
+          <tr>
+            <td colspan="5">No teachers found.</td>
+          </tr>
+        `;
+        return;
+      }
+
+      tableBody.innerHTML = teachers.map(teacher => {
+        const profile = teacher.profiles || {};
+        const fullName = `${profile.first_name || ''} ${profile.middle_name || ''} ${profile.last_name || ''}`.replace(/\s+/g, ' ').trim();
+
+        return `
+          <tr>
+            <td>${teacher.employee_no || ''}</td>
+            <td>${fullName}</td>
+            <td>${profile.email || ''}</td>
+            <td>${teacher.department || ''}</td>
+            <td>${profile.status || ''}</td>
+          </tr>
+        `;
+      }).join('');
+    }
+
+    async function loadTeachers() {
+      clearMessage('messageBox');
+
+      const token = getAccessToken();
+
+      try {
+        const result = await getRequest('/teachers', token);
+        renderTeachers(result.data);
+      } catch (error) {
+        showMessage('messageBox', error.message || 'Failed to load teachers.', 'error');
+      }
+    }
+
+    async function createTeacher() {
+      clearMessage('messageBox');
+
+      const token = getAccessToken();
+
+      const payload = {
+        first_name: document.getElementById('first_name').value.trim(),
+        middle_name: document.getElementById('middle_name').value.trim(),
+        last_name: document.getElementById('last_name').value.trim(),
+        employee_no: document.getElementById('employee_no').value.trim(),
+        email: document.getElementById('email').value.trim(),
+        password: document.getElementById('password').value.trim(),
+        department: document.getElementById('department').value.trim()
+      };
+
+      if (!payload.first_name || !payload.last_name || !payload.employee_no || !payload.email || !payload.password) {
+        showMessage('messageBox', 'First name, last name, employee number, email, and password are required.', 'error');
+        return;
+      }
+
+      try {
+        const result = await postRequest('/teachers', payload, token);
+        showMessage('messageBox', result.message, 'success');
+
+        document.getElementById('first_name').value = '';
+        document.getElementById('middle_name').value = '';
+        document.getElementById('last_name').value = '';
+        document.getElementById('employee_no').value = '';
+        document.getElementById('email').value = '';
+        document.getElementById('password').value = '';
+        document.getElementById('department').value = '';
+
+        loadTeachers();
+      } catch (error) {
+        showMessage('messageBox', error.message || 'Failed to create teacher.', 'error');
+      }
+    }
+
+    requireAdminPage();
+    loadTeachers();
+  </script>
+</body>
+</html>

@@ -1,0 +1,99 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Admin Dashboard</title>
+  <link rel="stylesheet" href="../assets/css/style.css" />
+</head>
+<body>
+  <div class="topbar">
+    <div class="topbar-inner">
+      <div class="brand">RFID Attendance System</div>
+      <div class="topbar-right">
+        <span id="adminName">Admin</span>
+        <button class="secondary small" onclick="handleLogout()">Logout</button>
+      </div>
+    </div>
+  </div>
+
+  <div class="container">
+    <div class="page-header">
+      <div>
+        <h1>Admin Dashboard</h1>
+        <p class="page-subtitle">Manage teachers, RFID registration, and system activity.</p>
+      </div>
+    </div>
+
+    <div class="highlight-panel">
+      <h2 id="welcomeTitle">Welcome Admin</h2>
+      <p>
+        Use this dashboard to create teacher accounts, assign teacher RFID cards,
+        and monitor system activity logs.
+      </p>
+    </div>
+
+    <div class="stats-grid" style="margin-top:20px;">
+      <div class="stat-box">
+        <div class="stat-label">Teachers</div>
+        <div class="stat-value">Manage</div>
+      </div>
+      <div class="stat-box">
+        <div class="stat-label">RFID</div>
+        <div class="stat-value">Assign</div>
+      </div>
+      <div class="stat-box">
+        <div class="stat-label">Logs</div>
+        <div class="stat-value">Track</div>
+      </div>
+    </div>
+
+    <div class="card" style="margin-top:20px;">
+      <h2>Quick Navigation</h2>
+      <div class="nav-links">
+        <a href="teachers.html" class="nav-card">
+          <div class="nav-card-title">Manage Teachers</div>
+          <div class="nav-card-text">Create teacher accounts and view all registered teachers.</div>
+        </a>
+
+        <a href="teacher-rfid.html" class="nav-card">
+          <div class="nav-card-title">Assign Teacher RFID</div>
+          <div class="nav-card-text">Register RFID cards for teachers and review card assignments.</div>
+        </a>
+
+        <a href="activity-logs.html" class="nav-card">
+          <div class="nav-card-title">Activity Logs</div>
+          <div class="nav-card-text">Review important actions and transactions across the system.</div>
+        </a>
+      </div>
+    </div>
+  </div>
+
+  <script src="../assets/js/api.js"></script>
+  <script src="../assets/js/session.js"></script>
+  <script src="../assets/js/utils.js"></script>
+
+  <script>
+    function handleLogout() {
+      logout();
+    }
+
+    function initPage() {
+      const profile = getProfile();
+
+      if (!profile || profile.role !== 'admin') {
+        window.location.href = '../login.html';
+        return;
+      }
+
+      document.getElementById('adminName').textContent =
+        `${profile.first_name} ${profile.last_name}`;
+
+      document.getElementById('welcomeTitle').textContent =
+        `Welcome ${profile.first_name}!`;
+    }
+
+    initPage();
+  </script>
+</body>
+</html>

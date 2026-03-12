@@ -1,0 +1,221 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Teacher Subjects</title>
+  <link rel="stylesheet" href="../assets/css/style.css" />
+</head>
+<body>
+  <div class="topbar">
+    <div class="topbar-inner">
+      <div class="brand">RFID Attendance System</div>
+      <div class="topbar-right">
+        <span id="teacherName">Teacher</span>
+        <button class="secondary small" onclick="goBack()">Back</button>
+      </div>
+    </div>
+  </div>
+
+  <div class="container">
+    <div class="page-header">
+      <div>
+        <h1>My Subjects</h1>
+        <p class="page-subtitle">Create and manage your subject list.</p>
+      </div>
+    </div>
+
+    <div class="grid-2">
+      <div class="card">
+        <h2>Create Subject</h2>
+
+        <div class="form-grid">
+          <div>
+            <label for="subject_code">Subject Code</label>
+            <input type="text" id="subject_code" placeholder="e.g. BCP123" />
+          </div>
+
+          <div>
+            <label for="subject_name">Subject Name</label>
+            <input type="text" id="subject_name" placeholder="e.g. AutoCAD" />
+          </div>
+
+          <div>
+            <label for="section">Section</label>
+            <input type="text" id="section" placeholder="e.g. CPT1A" />
+          </div>
+
+          <div>
+            <label for="semester">Semester</label>
+            <input type="text" id="semester" placeholder="e.g. 2nd Semester" />
+          </div>
+
+          <div>
+            <label for="school_year">School Year</label>
+            <input type="text" id="school_year" placeholder="e.g. 2025-2026" />
+          </div>
+
+          <div>
+            <label for="schedule_info">Schedule</label>
+            <input type="text" id="schedule_info" placeholder="e.g. Monday 7:00 - 10:00" />
+          </div>
+        </div>
+
+        <div class="button-row">
+          <button onclick="handleCreateSubject()">Create Subject</button>
+          <button class="secondary" onclick="goBack()">Back to Dashboard</button>
+        </div>
+
+        <div id="messageBox" class="message"></div>
+      </div>
+
+      <div class="card">
+        <h2>Subject Overview</h2>
+        <div class="empty-state">
+          Use this page to add new subjects and keep your teaching schedule organized.
+        </div>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="page-header" style="margin-bottom: 0;">
+        <div>
+          <h2>Subject List</h2>
+          <p class="page-subtitle">All subjects currently assigned to your account.</p>
+        </div>
+        <button onclick="loadSubjects()">Refresh Subjects</button>
+      </div>
+
+      <div class="table-container">
+        <table>
+          <thead>
+            <tr>
+              <th>Code</th>
+              <th>Name</th>
+              <th>Section</th>
+              <th>Semester</th>
+              <th>School Year</th>
+              <th>Schedule</th>
+            </tr>
+          </thead>
+          <tbody id="subjectsTableBody">
+            <tr>
+              <td colspan="6">Loading subjects...</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+
+  <script src="../assets/js/api.js"></script>
+  <script src="../assets/js/session.js"></script>
+  <script src="../assets/js/utils.js"></script>
+
+  <script>
+    function requireTeacherPage() {
+      const profile = getProfile();
+
+      if (!profile || profile.role !== 'teacher') {
+        window.location.href = '../login.html';
+        return null;
+      }
+
+      document.getElementById('teacherName').textContent =
+        `${profile.first_name} ${profile.last_name}`;
+
+      return profile;
+    }
+
+    function goBack() {
+      window.location.href = 'dashboard.html';
+    }
+
+    function renderSubjects(subjects) {
+      const tableBody = document.getElementById('subjectsTableBody');
+
+      if (!subjects || subjects.length === 0) {
+        tableBody.innerHTML = `
+          <tr>
+            <td colspan="6">No subjects found.</td>
+          </tr>
+        `;
+        return;
+      }
+
+      tableBody.innerHTML = subjects.map(subject => `
+        <tr>
+          <td>${subject.subject_code || ''}</td>
+          <td>${subject.subject_name || ''}</td>
+          <td>${subject.section || ''}</td>
+          <td>${subject.semester || ''}</td>
+          <td>${subject.school_year || ''}</td>
+          <td>${subject.schedule_info || ''}</td>
+        </tr>
+      `).join('');
+    }
+
+    async function loadSubjects() {
+      clearMessage('messageBox');
+
+      const token = getAccessToken();
+
+      if (!token) {
+        showMessage('messageBox', 'You are not logged in.', 'error');
+        return;
+      }
+
+      try {
+        const result = await getRequest('/subjects/my-subjects', token);
+        renderSubjects(result.data);
+      } catch (error) {
+        showMessage('messageBox', error.message || 'Failed to load subjects.', 'error');
+      }
+    }
+
+    async function handleCreateSubject() {
+      clearMessage('messageBox');
+
+      const token = getAccessToken();
+
+      if (!token) {
+        showMessage('messageBox', 'You are not logged in.', 'error');
+        return;
+      }
+
+      const payload = {
+        subject_code: document.getElementById('subject_code').value.trim(),
+        subject_name: document.getElementById('subject_name').value.trim(),
+        section: document.getElementById('section').value.trim(),
+        semester: document.getElementById('semester').value.trim(),
+        school_year: document.getElementById('school_year').value.trim(),
+        schedule_info: document.getElementById('schedule_info').value.trim()
+      };
+
+      if (!payload.subject_code || !payload.subject_name) {
+        showMessage('messageBox', 'Subject code and subject name are required.', 'error');
+        return;
+      }
+
+      try {
+        const result = await postRequest('/subjects', payload, token);
+        showMessage('messageBox', result.message, 'success');
+
+        document.getElementById('subject_code').value = '';
+        document.getElementById('subject_name').value = '';
+        document.getElementById('section').value = '';
+        document.getElementById('semester').value = '';
+        document.getElementById('school_year').value = '';
+        document.getElementById('schedule_info').value = '';
+
+        loadSubjects();
+      } catch (error) {
+        showMessage('messageBox', error.message || 'Failed to create subject.', 'error');
+      }
+    }
+
+    requireTeacherPage();
+    loadSubjects();
+  </script>
+</body>
+</html>
