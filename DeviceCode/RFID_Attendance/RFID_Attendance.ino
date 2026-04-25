@@ -18,8 +18,8 @@ LiquidCrystal_I2C lcd(0x27, 16, 2);
 
 MFRC522 rfid(SS_PIN, RST_PIN);
 
-const char* SERVER_URL = "http://192.168.43.11:3000";
-const char* DEVICE_KEY = "rfid_device_123";
+const char* SERVER_URL = "https://rfid-attendance-system-production-89c5.up.railway.app";
+const char* DEVICE_KEY = "rfid_scanner_device_12345";
 
 String SESSION_ID = "";
 String TEACHER_UID = "";

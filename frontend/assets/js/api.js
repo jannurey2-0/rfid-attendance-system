@@ -1,4 +1,4 @@
-const API_BASE_URL = 'http://localhost:3000/api';
+const API_BASE_URL = 'https://rfid-attendance-system-production-89c5.up.railway.app/api';
 
 async function apiRequest(endpoint, options = {}) {
   const config = {
