@@ -1,0 +1,11 @@
+{
+  "name": "rfid-attendance-system",
+  "version": "1.0.0",
+  "engines": {
+    "node": ">=18.0.0"
+  },
+  "scripts": {
+    "start": "cd backend && npm install --production && npm start",
+    "build": "cd backend && npm install --production"
+  }
+}
