@@ -8,6 +8,8 @@ const subjectRoutes = require('./modules/subjects/subjectRoutes');
 const studentRoutes = require('./modules/students/studentRoutes');
 const attendanceRoutes = require('./modules/attendance/attendanceRoutes');
 const errorHandler = require('./middlewares/errorHandler');
+const deviceScanRoutes = require('./modules/rfid/deviceScanRoutes');
+const activityLogRoutes = require('./modules/activityLogs/activityLogRoutes');
 
 const app = express();
 
@@ -36,6 +38,8 @@ app.use('/api/rfid', rfidRoutes);
 app.use('/api/subjects', subjectRoutes);
 app.use('/api/students', studentRoutes);
 app.use('/api/attendance', attendanceRoutes);
+app.use('/api/activity-logs', activityLogRoutes);
 app.use(errorHandler);
+app.use('/api/rfid', deviceScanRoutes);
 
 module.exports = app;

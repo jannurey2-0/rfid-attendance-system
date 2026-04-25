@@ -5,6 +5,141 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>Assign Teacher RFID</title>
   <link rel="stylesheet" href="../assets/css/style.css" />
+  <style>
+    .modal {
+      position: fixed;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;
+      background-color: rgba(0, 0, 0, 0.5);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      z-index: 1000;
+    }
+
+    .modal-content {
+      background: white;
+      border-radius: 8px;
+      width: 90%;
+      max-width: 500px;
+      box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+    }
+
+    .modal-header {
+      padding: 20px;
+      border-bottom: 1px solid #e2e8f0;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+    }
+
+    .modal-header h2 {
+      margin: 0;
+      font-size: 1.5rem;
+    }
+
+    .modal-close {
+      background: none;
+      border: none;
+      font-size: 1.5rem;
+      cursor: pointer;
+      color: #64748b;
+      padding: 0;
+      width: 32px;
+      height: 32px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+
+    .modal-close:hover {
+      color: #1e293b;
+    }
+
+    .modal-body {
+      padding: 20px;
+    }
+
+    .modal-footer {
+      padding: 20px;
+      border-top: 1px solid #e2e8f0;
+      display: flex;
+      gap: 10px;
+      justify-content: flex-end;
+    }
+
+    .rfid-scanner-box {
+      margin: 20px 0;
+    }
+
+    .rfid-scanner-box input {
+      width: 100%;
+      padding: 12px;
+      font-size: 1.1rem;
+      font-family: 'Courier New', monospace;
+      border: 2px solid #3b82f6;
+      border-radius: 6px;
+      text-align: center;
+      background-color: #f8fafc;
+    }
+
+    .rfid-scanner-box input:focus {
+      outline: none;
+      border-color: #2563eb;
+      background-color: #ffffff;
+    }
+
+    .scanner-status {
+      margin-top: 10px;
+      text-align: center;
+      font-size: 0.9rem;
+    }
+
+    .status-indicator {
+      padding: 8px 12px;
+      border-radius: 4px;
+      display: inline-block;
+    }
+
+    .status-indicator.waiting {
+      background-color: #fef3c7;
+      color: #92400e;
+    }
+
+    .status-indicator.scanned {
+      background-color: #d1fae5;
+      color: #065f46;
+    }
+
+    .rfid-instructions {
+      background-color: #f1f5f9;
+      padding: 15px;
+      border-radius: 6px;
+      margin-top: 15px;
+    }
+
+    .rfid-instructions h3 {
+      margin-top: 0;
+      font-size: 1rem;
+    }
+
+    .rfid-instructions ol {
+      margin: 10px 0;
+      padding-left: 20px;
+    }
+
+    .rfid-instructions li {
+      margin: 5px 0;
+      font-size: 0.9rem;
+    }
+
+    button:disabled {
+      opacity: 0.5;
+      cursor: not-allowed;
+    }
+  </style>
 </head>
 <body>
   <div class="topbar">
@@ -27,7 +162,7 @@
 
     <div class="card">
       <h2>Teacher RFID List</h2>
-      <p class="page-subtitle">Use the Assign RFID button to register a card for a teacher.</p>
+      <p class="page-subtitle">Click "Assign RFID" and scan the card using your RFID scanner.</p>
 
       <div id="messageBox" class="message"></div>
 
@@ -58,11 +193,56 @@
     </div>
   </div>
 
+  <!-- RFID Scanning Modal -->
+  <div id="rfidModal" class="modal" style="display:none;">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h2>Scan RFID Card</h2>
+        <button class="modal-close" onclick="closeRfidModal()">&times;</button>
+      </div>
+      
+      <div class="modal-body">
+        <p id="rfidModalMessage">Scan the RFID card now...</p>
+        
+        <div class="rfid-scanner-box">
+          <input 
+            type="text" 
+            id="rfidScannerInput" 
+            placeholder="Click here and scan RFID card" 
+            autocomplete="off"
+            readonly
+          />
+          <div class="scanner-status" id="scannerStatus">
+            <span class="status-indicator waiting">⏳ Waiting for scan...</span>
+          </div>
+        </div>
+
+        <div class="rfid-instructions">
+          <h3>Instructions:</h3>
+          <ol>
+            <li>Place the RFID card on the scanner</li>
+            <li>Wait for the UID to appear</li>
+            <li>Click "Assign" to complete the assignment</li>
+          </ol>
+        </div>
+      </div>
+
+      <div class="modal-footer">
+        <button class="secondary" onclick="closeRfidModal()">Cancel</button>
+        <button id="assignRfidBtn" onclick="confirmAssignRfid()" disabled>Assign RFID</button>
+      </div>
+    </div>
+  </div>
+
   <script src="../assets/js/api.js"></script>
   <script src="../assets/js/session.js"></script>
   <script src="../assets/js/utils.js"></script>
 
   <script>
+    let currentTeacherId = null;
+    let scannedUid = null;
+    let rfidPollingInterval = null;
+
     function requireAdminPage() {
       const profile = getProfile();
 
@@ -105,7 +285,7 @@
             <td>${rfidUid}</td>
             <td>
               <div class="table-actions">
-                <button class="small" onclick="assignTeacherRfid('${item.teacher_id}')">Assign RFID</button>
+                <button class="small" onclick="openRfidModal('${item.teacher_id}')">Assign RFID</button>
               </div>
             </td>
           </tr>
@@ -126,25 +306,109 @@
       }
     }
 
-    async function assignTeacherRfid(teacherId) {
-      const uid = prompt('Scan or enter RFID UID for teacher');
+    function openRfidModal(teacherId) {
+      currentTeacherId = teacherId;
+      scannedUid = null;
+      
+      document.getElementById('rfidScannerInput').value = '';
+      document.getElementById('assignRfidBtn').disabled = true;
+      document.getElementById('rfidModalMessage').textContent = 'Scan the RFID card on your ESP32 device...';
+      document.getElementById('scannerStatus').innerHTML = '<span class="status-indicator waiting">⏳ Waiting for scan on device...</span>';
+      document.getElementById('rfidModal').style.display = 'flex';
+      
+      // Start polling for RFID scans from device
+      startRfidPolling();
+    }
 
-      if (!uid) return;
+    function closeRfidModal() {
+      document.getElementById('rfidModal').style.display = 'none';
+      currentTeacherId = null;
+      scannedUid = null;
+      
+      // Stop polling
+      stopRfidPolling();
+    }
+
+    function startRfidPolling() {
+      stopRfidPolling();
+      
+      // Poll every 1 second for RFID scans
+      rfidPollingInterval = setInterval(async () => {
+        await checkForRfidScan();
+      }, 1000);
+    }
+
+    function stopRfidPolling() {
+      if (rfidPollingInterval) {
+        clearInterval(rfidPollingInterval);
+        rfidPollingInterval = null;
+      }
+    }
+
+    async function checkForRfidScan() {
+      try {
+        const result = await getRequest('/rfid/device/login-scan');
+        
+        if (result.data && result.data.uid && !result.data.used) {
+          processScannedUid(result.data.uid);
+          
+          // Consume the scan so it won't be read again
+          try {
+            await postRequest('/rfid/device/login-scan/consume', {});
+          } catch (consumeError) {
+            console.error('Failed to consume login scan:', consumeError);
+          }
+        }
+      } catch (error) {
+        console.error('Failed to check for RFID scan:', error);
+      }
+    }
+
+    function processScannedUid(uid) {
+      if (!uid || uid.length < 4) {
+        showMessage('messageBox', 'Invalid RFID UID. Please try again.', 'error');
+        return;
+      }
+
+      scannedUid = uid;
+      document.getElementById('rfidScannerInput').value = uid;
+      document.getElementById('assignRfidBtn').disabled = false;
+      document.getElementById('rfidModalMessage').textContent = 'RFID card scanned successfully!';
+      document.getElementById('scannerStatus').innerHTML = '<span class="status-indicator scanned">✅ Card scanned: ' + uid + '</span>';
+      
+      // Stop polling once we got a scan
+      stopRfidPolling();
+    }
+
+    async function confirmAssignRfid() {
+      if (!currentTeacherId || !scannedUid) {
+        showMessage('messageBox', 'Please scan an RFID card first.', 'error');
+        return;
+      }
 
       const token = getAccessToken();
 
       try {
         const result = await postRequest('/rfid/teachers/assign', {
-          teacher_id: teacherId,
-          uid: uid.trim()
+          teacher_id: currentTeacherId,
+          uid: scannedUid
         }, token);
 
         showMessage('messageBox', result.message, 'success');
+        closeRfidModal();
         loadTeacherRfid();
       } catch (error) {
         showMessage('messageBox', error.message || 'Failed to assign teacher RFID.', 'error');
       }
     }
+
+    // Close modal when clicking outside
+    document.addEventListener('click', function(event) {
+      const modal = document.getElementById('rfidModal');
+      if (event.target === modal) {
+        closeRfidModal();
+      }
+    });
 
     requireAdminPage();
     loadTeacherRfid();

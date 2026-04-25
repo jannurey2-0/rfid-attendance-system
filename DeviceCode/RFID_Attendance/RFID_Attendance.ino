@@ -14,13 +14,16 @@ LiquidCrystal_I2C lcd(0x27, 16, 2);
 #define BUTTON_PIN 32
 #define GREEN_LED 25
 #define RED_LED 26
+#define BUZZER_PIN 13
 
 MFRC522 rfid(SS_PIN, RST_PIN);
 
-const char* SERVER_URL = "http://192.168.1.6:3000";
+const char* SERVER_URL = "http://192.168.43.11:3000";
 const char* DEVICE_KEY = "rfid_device_123";
 
 String SESSION_ID = "";
+String TEACHER_UID = "";
+bool teacherVerified = false;
 
 String lastUID = "";
 unsigned long lastScanTime = 0;
@@ -30,10 +33,6 @@ unsigned long scanCooldown = 3000;
 unsigned long buttonPressStart = 0;
 bool buttonHeld = false;
 
-// --------Teacher Variables ---------//
-String TEACHER_UID = "";
-bool teacherVerified = false;
-
 // ---------- LED modes ----------
 enum LedMode {
   LED_BOOTING,
@@ -41,7 +40,8 @@ enum LedMode {
   LED_NO_SESSION,
   LED_PROCESSING,
   LED_ERROR,
-  LED_WIFI_RESET
+  LED_WIFI_RESET,
+  LED_TEACHER_REQUIRED
 };
 
 LedMode currentLedMode = LED_BOOTING;
@@ -87,7 +87,7 @@ void showFailed() {
   lcd.setCursor(0, 0);
   lcd.print("Scan Failed");
   lcd.setCursor(0, 1);
-  lcd.print("Try Again");
+  lcd.print("Try Again"); 
 }
 
 void showRefreshing() {
@@ -114,10 +114,96 @@ void showRebooting() {
   lcd.print("Please wait");
 }
 
+void showTeacherRequired() {
+  lcd.clear();
+  lcd.setCursor(0, 0);
+  lcd.print("Teacher Required");
+  lcd.setCursor(0, 1);
+  lcd.print("Tap Teacher RFID");
+}
+
+void showTeacherVerified() {
+  lcd.clear();
+  lcd.setCursor(0, 0);
+  lcd.print("Teacher Verified");
+  lcd.setCursor(0, 1);
+  lcd.print("Scanner Ready");
+}
+
+void showTeacherFirst() {
+  lcd.clear();
+  lcd.setCursor(0, 0);
+  lcd.print("Invalid Scan");
+  lcd.setCursor(0, 1);
+  lcd.print("Teacher First");
+}
+
+void showNoTeacherUID() {
+  lcd.clear();
+  lcd.setCursor(0, 0);
+  lcd.print("No Teacher RFID");
+  lcd.setCursor(0, 1);
+  lcd.print("Check Admin");
+}
+
+void showDeviceRefreshed() {
+  lcd.clear();
+  lcd.setCursor(0, 0);
+  lcd.print("Device Refreshed!");
+  lcd.setCursor(0, 1);
+  lcd.print("Checking Sess");
+}
+
+void showSessionEnded() {
+  lcd.clear();
+  lcd.setCursor(0, 0);
+  lcd.print("Session Ended");
+  lcd.setCursor(0, 1);
+  lcd.print("Refreshing...");
+}
+
 // ---------- LED helpers ----------
 void applyLedState(bool greenOn, bool redOn) {
   digitalWrite(GREEN_LED, greenOn ? HIGH : LOW);
   digitalWrite(RED_LED, redOn ? HIGH : LOW);
+}
+
+// ---------- BUZZER SOUNDS ----------
+
+// Simple tone wrapper (passive buzzer)
+void beep(int freq, int duration) {
+  tone(BUZZER_PIN, freq);
+  delay(duration);
+  noTone(BUZZER_PIN);
+  delay(50);
+}
+
+// Boot sound (ascending tone)
+void soundBoot() {
+  beep(800, 150);
+  beep(1200, 150);
+  beep(1600, 200);
+}
+
+// Success sound (pleasant double beep)
+void soundSuccess() {
+  beep(1500, 120);
+  delay(80);
+  beep(1800, 180);
+}
+
+// Error / Declined sound (low harsh tone)
+void soundError() {
+  beep(400, 300);
+  delay(100);
+  beep(300, 400);
+}
+
+// Duplicate scan sound (fast warning)
+void soundDuplicate() {
+  beep(1000, 80);
+  beep(1000, 80);
+  beep(1000, 80);
 }
 
 void setLedMode(LedMode mode) {
@@ -130,19 +216,28 @@ void setLedMode(LedMode mode) {
     case LED_BOOTING:
       applyLedState(false, true);
       break;
+
     case LED_READY:
       applyLedState(true, false);
       break;
+
     case LED_NO_SESSION:
       applyLedState(false, false);
       break;
+
     case LED_PROCESSING:
       applyLedState(false, false);
       break;
+
     case LED_ERROR:
       applyLedState(false, false);
       break;
+
     case LED_WIFI_RESET:
+      applyLedState(false, false);
+      break;
+
+    case LED_TEACHER_REQUIRED:
       applyLedState(false, false);
       break;
   }
@@ -191,6 +286,14 @@ void updateLEDs() {
         applyLedState(false, redLedState);
       }
       break;
+
+    case LED_TEACHER_REQUIRED:
+      if (now - lastLedBlink >= 400) {
+        lastLedBlink = now;
+        greenLedState = !greenLedState;
+        applyLedState(greenLedState, false);
+      }
+      break;
   }
 }
 
@@ -225,6 +328,39 @@ void connectToWiFi() {
   }
 }
 
+void sendLoginScan(String uid) {
+
+  if (WiFi.status() != WL_CONNECTED) connectToWiFi();
+
+  HTTPClient http;
+
+  String url = String(SERVER_URL) + "/api/rfid/device/login-scan";
+
+  http.begin(url);
+  http.addHeader("Content-Type", "application/json");
+  http.addHeader("x-device-key", DEVICE_KEY);
+
+  String body = "{\"uid\":\"" + uid + "\"}";
+
+  Serial.println("Sending login scan...");
+  Serial.println(body);
+
+  int httpCode = http.POST(body);
+
+  Serial.print("Login Scan HTTP Response Code: ");
+  Serial.println(httpCode);
+
+  if (httpCode > 0) {
+    String response = http.getString();
+    Serial.println("Server Response:");
+    Serial.println(response);
+  } else {
+    Serial.println("Login scan request failed");
+  }
+
+  http.end();
+}
+
 // ---------- Session ----------
 void getActiveSession() {
   HTTPClient http;
@@ -254,6 +390,7 @@ void getActiveSession() {
     if (error) {
       Serial.println("JSON parsing failed");
       http.end();
+
       setLedMode(LED_ERROR);
       showFailed();
       delay(1500);
@@ -262,8 +399,13 @@ void getActiveSession() {
         showNoSession();
         setLedMode(LED_NO_SESSION);
       } else {
-        showReady();
-        setLedMode(LED_READY);
+        if (teacherVerified) {
+          showReady();
+          setLedMode(LED_READY);
+        } else {
+          showTeacherRequired();
+          setLedMode(LED_TEACHER_REQUIRED);
+        }
       }
       return;
     }
@@ -278,10 +420,22 @@ void getActiveSession() {
       Serial.print("Active Session ID: ");
       Serial.println(SESSION_ID);
 
-      showReady();
-      setLedMode(LED_READY);
+      Serial.print("Teacher UID: ");
+      Serial.println(TEACHER_UID);
+
+      if (TEACHER_UID == "") {
+        showNoTeacherUID();
+        setLedMode(LED_ERROR);
+      } else {
+        showTeacherRequired();
+        setLedMode(LED_TEACHER_REQUIRED);
+      }
+
     } else {
       SESSION_ID = "";
+      TEACHER_UID = "";
+      teacherVerified = false;
+
       Serial.println("No active session found");
 
       showNoSession();
@@ -291,6 +445,10 @@ void getActiveSession() {
   } else {
     Serial.println("Failed to get active session");
 
+    SESSION_ID = "";
+    TEACHER_UID = "";
+    teacherVerified = false;
+
     showNoSession();
     setLedMode(LED_NO_SESSION);
   }
@@ -298,17 +456,49 @@ void getActiveSession() {
   http.end();
 }
 
-void showTeacherRequired() {
+void checkDeviceRefreshSignal() {
+  if (WiFi.status() != WL_CONNECTED) return;
 
-  lcd.clear();
-  lcd.setCursor(0,0);
-  lcd.print("Teacher Required");
-  lcd.setCursor(0,1);
-  lcd.print("Tap Teacher RFID");
+  HTTPClient http;
+  String url = String(SERVER_URL) + "/api/rfid/device/status";
 
+  http.begin(url);
+  http.addHeader("x-device-key", DEVICE_KEY);
+
+  int httpCode = http.GET();
+
+  if (httpCode == 200) {
+    String payload = http.getString();
+    
+    DynamicJsonDocument doc(512);
+    DeserializationError error = deserializeJson(doc, payload);
+
+    if (!error && doc.containsKey("data")) {
+      bool shouldRefresh = doc["data"]["shouldRefresh"];
+      bool sessionEnded = doc["data"]["sessionEnded"];
+
+      if (sessionEnded) {
+        Serial.println("Session end signal received!");
+        showSessionEnded();
+        setLedMode(LED_PROCESSING);
+        delay(1500);
+        // Reset session and check for new one
+        SESSION_ID = "";
+        TEACHER_UID = "";
+        teacherVerified = false;
+        getActiveSession();
+      } else if (shouldRefresh) {
+        Serial.println("Remote refresh signal received!");
+        showDeviceRefreshed();
+        setLedMode(LED_PROCESSING);
+        delay(1000);
+        getActiveSession();
+      }
+    }
+  }
+
+  http.end();
 }
-
-
 
 // ---------- RFID ----------
 String readUID() {
@@ -335,6 +525,14 @@ void sendAttendance(String uid) {
     Serial.println("No active session. Scan ignored.");
     showNoSession();
     setLedMode(LED_NO_SESSION);
+    delay(1500);
+    return;
+  }
+
+  if (!teacherVerified) {
+    Serial.println("Teacher not yet verified.");
+    showTeacherRequired();
+    setLedMode(LED_TEACHER_REQUIRED);
     delay(1500);
     return;
   }
@@ -371,23 +569,26 @@ void sendAttendance(String uid) {
     Serial.println("Server Response:");
     Serial.println(response);
 
+    soundSuccess();
+
     showSuccess();
     setLedMode(LED_READY);
     delay(2000);
     showReady();
   } else {
     Serial.println("Request failed");
+    soundError();
 
     showFailed();
     setLedMode(LED_ERROR);
     delay(2000);
 
-    if (SESSION_ID == "") {
-      showNoSession();
-      setLedMode(LED_NO_SESSION);
-    } else {
+    if (teacherVerified) {
       showReady();
       setLedMode(LED_READY);
+    } else {
+      showTeacherRequired();
+      setLedMode(LED_TEACHER_REQUIRED);
     }
   }
 
@@ -455,9 +656,11 @@ void setup() {
   pinMode(BUTTON_PIN, INPUT_PULLUP);
   pinMode(GREEN_LED, OUTPUT);
   pinMode(RED_LED, OUTPUT);
+  pinMode(BUZZER_PIN, OUTPUT);
 
   setLedMode(LED_BOOTING);
 
+  Wire.begin(21, 22);
   lcd.init();
   lcd.backlight();
 
@@ -465,6 +668,7 @@ void setup() {
   lcd.print("RFID Scanner");
   lcd.setCursor(0, 1);
   lcd.print("Starting...");
+  soundBoot();
 
   SPI.begin();
   rfid.PCD_Init();
@@ -475,23 +679,113 @@ void setup() {
   getActiveSession();
 }
 
+unsigned long lastRefreshCheck = 0;
+unsigned long refreshCheckInterval = 2000; // Check every 2 seconds
+
 void loop() {
   handleButton();
   updateLEDs();
 
+  unsigned long now = millis();
+
+  // Check for remote refresh signal from web app
+  if (now - lastRefreshCheck >= refreshCheckInterval) {
+    lastRefreshCheck = now;
+    checkDeviceRefreshSignal();
+  }
+
   String uid = readUID();
   if (uid == "") return;
 
-  unsigned long now = millis();
-
+  // Prevent duplicate scans
   if (uid == lastUID && now - lastScanTime < scanCooldown) {
     Serial.println("Duplicate scan ignored");
+    soundDuplicate();
     delay(300);
     return;
   }
 
   Serial.print("Card UID: ");
   Serial.println(uid);
+
+  // ---------------------------------------------------
+  // MODE 1 : NO ACTIVE SESSION → LOGIN MODE
+  // ---------------------------------------------------
+  if (SESSION_ID == "") {
+
+    Serial.println("No active session → Sending LOGIN scan");
+
+    lcd.clear();
+    lcd.setCursor(0,0);
+    lcd.print("Login Scan");
+    lcd.setCursor(0,1);
+    lcd.print(uid);
+
+    setLedMode(LED_PROCESSING);
+
+    sendLoginScan(uid);
+
+    delay(2000);
+
+    showNoSession();
+    setLedMode(LED_NO_SESSION);
+
+    lastUID = uid;
+    lastScanTime = now;
+
+    return;
+  }
+
+  // ---------------------------------------------------
+  // MODE 2 : ACTIVE SESSION → ATTENDANCE MODE
+  // ---------------------------------------------------
+
+  // Teacher must scan first
+  if (!teacherVerified) {
+
+    if (TEACHER_UID == "") {
+      Serial.println("No teacher RFID found for active session.");
+      showNoTeacherUID();
+      setLedMode(LED_ERROR);
+      delay(1500);
+      return;
+    }
+
+    if (uid == TEACHER_UID) {
+
+      Serial.println("Teacher verified.");
+
+      teacherVerified = true;
+
+      showTeacherVerified();
+      setLedMode(LED_READY);
+
+      delay(2000);
+
+      showReady();
+
+    } else {
+
+      Serial.println("Student tried before teacher.");
+      soundError();
+
+      showTeacherFirst();
+      setLedMode(LED_TEACHER_REQUIRED);
+
+      delay(2000);
+
+      showTeacherRequired();
+    }
+
+    lastUID = uid;
+    lastScanTime = now;
+
+    return;
+  }
+
+  // ---------------------------------------------------
+  // STUDENT ATTENDANCE
+  // ---------------------------------------------------
 
   sendAttendance(uid);
 

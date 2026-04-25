@@ -1,5 +1,6 @@
 const { supabase, supabaseAdmin } = require('../../config/supabase');
 const AppError = require('../../utils/AppError');
+const jwt = require('jsonwebtoken');
 
 async function loginWithEmail(email, password) {
   const { data, error } = await supabase.auth.signInWithPassword({
@@ -26,6 +27,20 @@ async function getProfileByAuthUserId(authUserId) {
   }
 
   return data;
+}
+
+function generateSupabaseCompatibleToken(authUserId) {
+  const payload = {
+    sub: authUserId,
+    role: 'authenticated',
+    aud: 'authenticated'
+  };
+
+  const token = jwt.sign(payload, process.env.SUPABASE_JWT_SECRET, {
+    expiresIn: '8h'
+  });
+
+  return token;
 }
 
 async function loginWithRfid(uid) {
@@ -96,6 +111,8 @@ async function loginWithRfid(uid) {
     }
   ]);
 
+  const accessToken = generateSupabaseCompatibleToken(profile.auth_user_id);
+
   return {
     profile,
     teacher,
@@ -103,6 +120,10 @@ async function loginWithRfid(uid) {
       id: card.id,
       uid: card.uid,
       last_used_at: card.last_used_at
+    },
+    session: {
+      access_token: accessToken,
+      refresh_token: null
     }
   };
 }

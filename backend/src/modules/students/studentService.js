@@ -6,6 +6,7 @@ async function createStudent({
   last_name,
   middle_name,
   email,
+  parent_phone_number,
   student_no,
   year_level,
   section,
@@ -46,6 +47,7 @@ async function createStudent({
       {
         profile_id: profileData.id,
         student_no,
+        parent_phone: parent_phone_number || null,
         year_level: year_level || null,
         section: section || null
       }
@@ -76,7 +78,8 @@ async function createStudent({
       entity_id: studentData.id,
       details: {
         student_no,
-        email: email || null
+        email: email || null,
+        parent_phone: parent_phone_number || null
       }
     }
   ]);
@@ -93,6 +96,7 @@ async function getMyStudents() {
     .select(`
       id,
       student_no,
+      parent_phone,
       year_level,
       section,
       created_at,

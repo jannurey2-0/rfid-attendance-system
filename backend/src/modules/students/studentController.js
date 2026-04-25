@@ -13,6 +13,7 @@ async function createStudentHandler(req, res, next) {
       last_name,
       middle_name,
       email,
+      parent_phone_number,
       student_no,
       year_level,
       section
@@ -31,6 +32,7 @@ async function createStudentHandler(req, res, next) {
       last_name,
       middle_name,
       email,
+      parent_phone_number,
       student_no,
       year_level,
       section,

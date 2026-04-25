@@ -1,0 +1,206 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Attendance History</title>
+  <link rel="stylesheet" href="../assets/css/style.css" />
+</head>
+<body>
+  <div class="topbar">
+    <div class="topbar-inner">
+      <div class="brand">RFID Attendance System</div>
+      <div class="topbar-right">
+        <span id="teacherName">Teacher</span>
+        <button class="secondary small" onclick="goBack()">Back</button>
+      </div>
+    </div>
+  </div>
+
+  <div class="container">
+    <div class="page-header">
+      <div>
+        <h1>Attendance History</h1>
+        <p class="page-subtitle">View and export attendance records from all your past sessions.</p>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="page-header" style="margin-bottom: 0;">
+        <div>
+          <h2>All Sessions</h2>
+          <p class="page-subtitle">Select any session to download its attendance records.</p>
+        </div>
+        <button onclick="loadHistory()">Refresh</button>
+      </div>
+
+      <div class="table-container">
+        <table>
+          <thead>
+            <tr>
+              <th>Date</th>
+              <th>Subject</th>
+              <th>Section</th>
+              <th>Mode</th>
+              <th>Status</th>
+              <th>Records</th>
+              <th>Action</th>
+            </tr>
+          </thead>
+          <tbody id="historyTableBody">
+            <tr>
+              <td colspan="7">Loading attendance history...</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+
+      <div id="messageBox" class="message"></div>
+    </div>
+  </div>
+
+  <script src="../assets/js/api.js"></script>
+  <script src="../assets/js/session.js"></script>
+  <script src="../assets/js/utils.js"></script>
+
+  <script>
+    function requireTeacherPage() {
+      const profile = getProfile();
+
+      if (!profile || profile.role !== 'teacher') {
+        window.location.href = '../login.html';
+        return null;
+      }
+
+      document.getElementById('teacherName').textContent =
+        `${profile.first_name} ${profile.last_name}`;
+
+      return profile;
+    }
+
+    function goBack() {
+      window.location.href = 'dashboard.html';
+    }
+
+    function formatDate(dateString) {
+      if (!dateString) return 'N/A';
+      return new Date(dateString).toLocaleString('en-PH', {
+        year: 'numeric',
+        month: 'short',
+        day: 'numeric',
+        hour: '2-digit',
+        minute: '2-digit'
+      });
+    }
+
+    function formatMode(mode) {
+      if (!mode) return 'N/A';
+      return mode.replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase());
+    }
+
+    function renderHistory(sessions) {
+      const tableBody = document.getElementById('historyTableBody');
+
+      if (!sessions || sessions.length === 0) {
+        tableBody.innerHTML = `
+          <tr>
+            <td colspan="7">No attendance sessions found.</td>
+          </tr>
+        `;
+        return;
+      }
+
+      tableBody.innerHTML = sessions.map(session => {
+        const subject = session.subjects || {};
+        const statusClass = session.status === 'active' ? 'badge' : '';
+        const statusLabel = session.status === 'active' ? 'Active' : 'Closed';
+
+        return `
+          <tr>
+            <td>${formatDate(session.start_time)}</td>
+            <td>${subject.subject_code || ''} - ${subject.subject_name || ''}</td>
+            <td>${subject.section || ''}</td>
+            <td>${formatMode(session.mode)}</td>
+            <td><span class="${statusClass}">${statusLabel}</span></td>
+            <td>${session.record_count || 0}</td>
+            <td>
+              <div class="table-actions">
+                <button class="small" onclick="exportSession('${session.id}', '${subject.subject_code || 'Attendance'}')" style="background-color: #28a745;">Export Excel</button>
+              </div>
+            </td>
+          </tr>
+        `;
+      }).join('');
+    }
+
+    async function loadHistory() {
+      clearMessage('messageBox');
+
+      const token = getAccessToken();
+
+      if (!token) {
+        showMessage('messageBox', 'You are not logged in.', 'error');
+        return;
+      }
+
+      try {
+        const result = await getRequest('/attendance/sessions/my-history', token);
+        renderHistory(result.data);
+      } catch (error) {
+        showMessage('messageBox', error.message || 'Failed to load attendance history.', 'error');
+      }
+    }
+
+    async function exportSession(sessionId, subjectCode) {
+      clearMessage('messageBox');
+
+      const token = getAccessToken();
+
+      if (!token) {
+        showMessage('messageBox', 'You are not logged in.', 'error');
+        return;
+      }
+
+      try {
+        const response = await fetch(`${API_BASE_URL}/attendance/sessions/${sessionId}/export`, {
+          method: 'GET',
+          headers: {
+            'Authorization': `Bearer ${token}`
+          }
+        });
+
+        if (!response.ok) {
+          const error = await response.json();
+          throw new Error(error.message || 'Failed to export');
+        }
+
+        const contentDisposition = response.headers.get('content-disposition');
+        let filename = `${subjectCode}_attendance.xlsx`;
+        if (contentDisposition) {
+          const filenameMatch = contentDisposition.match(/filename="?(.+?)"?$/);
+          if (filenameMatch && filenameMatch[1]) {
+            filename = decodeURIComponent(filenameMatch[1]);
+          }
+        }
+
+        const blob = await response.blob();
+        const url = window.URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = filename;
+        document.body.appendChild(a);
+        a.click();
+        window.URL.revokeObjectURL(url);
+        document.body.removeChild(a);
+
+        showMessage('messageBox', 'Attendance records exported successfully!', 'success');
+      } catch (error) {
+        showMessage('messageBox', error.message || 'Failed to export attendance records.', 'error');
+      }
+    }
+
+    requireTeacherPage();
+    loadHistory();
+  </script>
+</body>
+</html>

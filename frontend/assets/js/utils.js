@@ -1,5 +1,3 @@
-console.log('utils.js loaded');
-
 function showMessage(elementId, message, type = 'info') {
   const el = document.getElementById(elementId);
   if (!el) return;

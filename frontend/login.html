@@ -31,9 +31,15 @@
         <div class="section-divider"></div>
 
         <h3 style="margin-bottom: 10px;">RFID Login</h3>
-        <label for="uid">RFID UID</label>
-        <input type="text" id="uid" placeholder="Scan or enter RFID UID" />
-        <button class="secondary" onclick="handleRfidLogin()">Login with RFID</button>
+
+        <div class="button-row">
+          <button onclick="startRfidScanMode()">Start RFID Scan</button>
+          <button class="secondary" onclick="stopRfidScanMode()">Stop Scan</button>
+        </div>
+
+        <div id="scanStatusBox" class="message info" style="margin-top:10px;">
+          RFID scan mode is idle.
+        </div>
 
         <div id="messageBox" class="message"></div>
       </div>
@@ -46,6 +52,9 @@
   <script src="assets/js/auth.js"></script>
 
   <script>
+    let loginScanInterval = null;
+    let scanModeActive = false;
+
     async function handleEmailLogin() {
       clearMessage('messageBox');
 
@@ -66,21 +75,58 @@
       }
     }
 
-    async function handleRfidLogin() {
-      clearMessage('messageBox');
+    function setScanStatus(message, type = 'info') {
+      const box = document.getElementById('scanStatusBox');
+      box.textContent = message;
+      box.className = `message ${type}`;
+    }
 
-      const uid = document.getElementById('uid').value.trim();
+    function startRfidScanMode() {
+      if (scanModeActive) return;
 
-      if (!uid) {
-        showMessage('messageBox', 'RFID UID is required.', 'error');
-        return;
+      scanModeActive = true;
+      setScanStatus('Waiting for teacher RFID scan...', 'info');
+
+      loginScanInterval = setInterval(checkLatestLoginScan, 2000);
+    }
+
+    function stopRfidScanMode() {
+      scanModeActive = false;
+
+      if (loginScanInterval) {
+        clearInterval(loginScanInterval);
+        loginScanInterval = null;
       }
 
+      setScanStatus('RFID scan mode is idle.', 'info');
+    }
+
+    async function checkLatestLoginScan() {
       try {
-        const result = await loginWithRfid(uid);
-        showMessage('messageBox', result.message, 'success');
-        redirectByRole(result.data.profile);
+        const result = await getRequest('/rfid/device/login-scan');
+        const scan = result.data;
+
+        if (!scan || !scan.uid || scan.used) {
+          return;
+        }
+
+        setScanStatus(`RFID detected: ${scan.uid}. Logging in...`, 'success');
+
+        const loginResult = await loginWithRfid(scan.uid);
+
+        // consume should not block redirect
+        try {
+          await postRequest('/rfid/device/login-scan/consume', {});
+        } catch (consumeError) {
+          console.error('Failed to consume login scan:', consumeError);
+        }
+
+        stopRfidScanMode();
+        showMessage('messageBox', loginResult.message, 'success');
+        redirectByRole(loginResult.data.profile);
+
       } catch (error) {
+        console.error('RFID login polling error:', error);
         showMessage('messageBox', error.message || 'RFID login failed.', 'error');
       }
     }

@@ -6,7 +6,9 @@ function saveAuthSession(data) {
 }
 
 function saveRfidSession(data) {
-  localStorage.setItem('rfidProfile', JSON.stringify(data.profile));
+  localStorage.setItem('accessToken', data.session.access_token);
+  localStorage.setItem('profile', JSON.stringify(data.profile));
+
   localStorage.setItem('rfidTeacher', JSON.stringify(data.teacher));
   localStorage.setItem('rfidCard', JSON.stringify(data.rfid_card));
 }
@@ -36,5 +38,5 @@ function clearSession() {
 }
 
 function isLoggedIn() {
-  return !!getAccessToken();
+  return !!getProfile();
 }

@@ -1,4 +1,5 @@
 const { supabaseAdmin } = require('../../config/supabase');
+const { sendSMS } = require('../../utils/smsService');
 const AppError = require('../../utils/AppError');
 
 async function getTeacherByProfileId(profileId) {
@@ -128,6 +129,57 @@ async function getMyActiveSessions(teacher_profile_id) {
   return data;
 }
 
+async function getMySessionHistory(teacher_profile_id) {
+  const teacher = await getTeacherByProfileId(teacher_profile_id);
+
+  const { data: sessions, error } = await supabaseAdmin
+    .from('attendance_sessions')
+    .select(`
+      *,
+      subjects (
+        id,
+        subject_code,
+        subject_name,
+        section,
+        semester,
+        school_year
+      )
+    `)
+    .eq('teacher_id', teacher.id)
+    .order('start_time', { ascending: false });
+
+  if (error) {
+    throw new AppError(
+      'Failed to fetch session history',
+      500,
+      'FETCH_SESSION_HISTORY_FAILED',
+      error.message
+    );
+  }
+
+  // Get record counts for all sessions in one query
+  const sessionIds = sessions.map(s => s.id);
+  const recordCounts = {};
+
+  if (sessionIds.length > 0) {
+    const { data: records, error: recordsError } = await supabaseAdmin
+      .from('attendance_records')
+      .select('session_id')
+      .in('session_id', sessionIds);
+
+    if (!recordsError && records) {
+      records.forEach(r => {
+        recordCounts[r.session_id] = (recordCounts[r.session_id] || 0) + 1;
+      });
+    }
+  }
+
+  return sessions.map(session => ({
+    ...session,
+    record_count: recordCounts[session.id] || 0
+  }));
+}
+
 async function scanAttendance({ session_id, uid }) {
   const cleanUid = String(uid).trim();
 
@@ -255,6 +307,36 @@ async function scanAttendance({ session_id, uid }) {
       'ATTENDANCE_SAVE_FAILED',
       recordError.message
     );
+  }
+
+  // ---------- SEND SMS TO PARENT ----------
+  try {
+
+    const phone = student.parent_phone;
+
+    if (phone) {
+
+      const now = new Date().toLocaleString();
+
+      const message = `Attendance Alert:
+  ${profile.first_name} ${profile.last_name} has been marked PRESENT.
+
+  Time: ${now}`;
+
+      await sendSMS(phone, message);
+
+      console.log("SMS sent to:", phone);
+
+    } else {
+
+      console.log("No phone number found for student:", student.id);
+
+    }
+
+  } catch (smsError) {
+
+    console.error("SMS sending failed:", smsError.message);
+
   }
 
   await supabaseAdmin
@@ -413,6 +495,79 @@ async function getSessionRecords({
   };
 }
 
+async function getSessionRecordsForExport({
+  teacher_profile_id,
+  session_id
+}) {
+  const teacher = await getTeacherByProfileId(teacher_profile_id);
+
+  const { data: session, error: sessionError } = await supabaseAdmin
+    .from('attendance_sessions')
+    .select(`
+      *,
+      subjects (
+        id,
+        subject_code,
+        subject_name,
+        section,
+        semester,
+        school_year
+      ),
+      teachers (
+        id,
+        profiles (
+          id,
+          first_name,
+          last_name
+        )
+      )
+    `)
+    .eq('id', session_id)
+    .eq('teacher_id', teacher.id)
+    .single();
+
+  if (sessionError || !session) {
+    throw new AppError('Session not found or not owned by teacher', 404, 'SESSION_NOT_FOUND');
+  }
+
+  const { data: records, error: recordsError } = await supabaseAdmin
+    .from('attendance_records')
+    .select(`
+      id,
+      scan_time,
+      attendance_status,
+      remarks,
+      students (
+        id,
+        student_no,
+        year_level,
+        section,
+        profiles (
+          id,
+          first_name,
+          last_name,
+          middle_name
+        )
+      )
+    `)
+    .eq('session_id', session_id)
+    .order('scan_time', { ascending: true });
+
+  if (recordsError) {
+    throw new AppError(
+      'Failed to fetch attendance records',
+      500,
+      'FETCH_RECORDS_FAILED',
+      recordsError.message
+    );
+  }
+
+  return {
+    session,
+    records
+  };
+}
+
 async function getDeviceActiveSession() {
 
   const { data: session, error } = await supabaseAdmin
@@ -464,8 +619,10 @@ async function getDeviceActiveSession() {
 module.exports = {
   startAttendanceSession,
   getMyActiveSessions,
+  getMySessionHistory,
   getDeviceActiveSession,
   scanAttendance,
   endAttendanceSession,
-  getSessionRecords
+  getSessionRecords,
+  getSessionRecordsForExport
 };

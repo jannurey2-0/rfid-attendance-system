@@ -41,6 +41,11 @@
           </div>
 
           <div>
+            <label for="parent_phone_number">Parent Phone Number</label>
+            <input type="text" id="parent_phone_number" placeholder="e.g. 09123456789" />
+          </div>
+
+          <div>
             <label for="first_name">First Name</label>
             <input type="text" id="first_name" placeholder="First Name" />
           </div>
@@ -60,7 +65,7 @@
             <input type="text" id="year_level" placeholder="e.g. 1st Year" />
           </div>
 
-          <div class="full-width">
+          <div>
             <label for="section">Section</label>
             <input type="text" id="section" placeholder="e.g. CPT1A" />
           </div>
@@ -105,13 +110,14 @@
               <th>Year</th>
               <th>Section</th>
               <th>Email</th>
+              <th>Parent Phone</th>
               <th>RFID</th>
               <th>Enroll</th>
             </tr>
           </thead>
           <tbody id="studentsTableBody">
             <tr>
-              <td colspan="7">Loading students...</td>
+              <td colspan="8">Loading students...</td>
             </tr>
           </tbody>
         </table>
@@ -119,12 +125,192 @@
     </div>
   </div>
 
+  <!-- RFID Scanning Modal -->
+  <div id="rfidModal" class="modal" style="display:none;">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h2>Scan RFID Card</h2>
+        <button class="modal-close" onclick="closeRfidModal()">&times;</button>
+      </div>
+      
+      <div class="modal-body">
+        <p id="rfidModalMessage">Scan the RFID card on your ESP32 device...</p>
+        
+        <div class="rfid-scanner-box">
+          <input 
+            type="text" 
+            id="rfidScannerInput" 
+            placeholder="Waiting for scan..." 
+            autocomplete="off"
+            readonly
+          />
+          <div class="scanner-status" id="scannerStatus">
+            <span class="status-indicator waiting">⏳ Waiting for scan on device...</span>
+          </div>
+        </div>
+
+        <div class="rfid-instructions">
+          <h3>Instructions:</h3>
+          <ol>
+            <li>Place the student's RFID card on the scanner</li>
+            <li>Wait for the UID to appear</li>
+            <li>Click "Assign" to complete the assignment</li>
+          </ol>
+        </div>
+      </div>
+
+      <div class="modal-footer">
+        <button class="secondary" onclick="closeRfidModal()">Cancel</button>
+        <button id="assignRfidBtn" onclick="confirmAssignRfid()" disabled>Assign RFID</button>
+      </div>
+    </div>
+  </div>
+
+  <style>
+    .modal {
+      position: fixed;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;
+      background-color: rgba(0, 0, 0, 0.5);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      z-index: 1000;
+    }
+
+    .modal-content {
+      background: white;
+      border-radius: 8px;
+      width: 90%;
+      max-width: 500px;
+      box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+    }
+
+    .modal-header {
+      padding: 20px;
+      border-bottom: 1px solid #e2e8f0;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+    }
+
+    .modal-header h2 {
+      margin: 0;
+      font-size: 1.5rem;
+    }
+
+    .modal-close {
+      background: none;
+      border: none;
+      font-size: 1.5rem;
+      cursor: pointer;
+      color: #64748b;
+      padding: 0;
+      width: 32px;
+      height: 32px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+
+    .modal-close:hover {
+      color: #1e293b;
+    }
+
+    .modal-body {
+      padding: 20px;
+    }
+
+    .modal-footer {
+      padding: 20px;
+      border-top: 1px solid #e2e8f0;
+      display: flex;
+      gap: 10px;
+      justify-content: flex-end;
+    }
+
+    .rfid-scanner-box {
+      margin: 20px 0;
+    }
+
+    .rfid-scanner-box input {
+      width: 100%;
+      padding: 12px;
+      font-size: 1.1rem;
+      font-family: 'Courier New', monospace;
+      border: 2px solid #3b82f6;
+      border-radius: 6px;
+      text-align: center;
+      background-color: #f8fafc;
+    }
+
+    .rfid-scanner-box input:focus {
+      outline: none;
+      border-color: #2563eb;
+      background-color: #ffffff;
+    }
+
+    .scanner-status {
+      margin-top: 10px;
+      text-align: center;
+      font-size: 0.9rem;
+    }
+
+    .status-indicator {
+      padding: 8px 12px;
+      border-radius: 4px;
+      display: inline-block;
+    }
+
+    .status-indicator.waiting {
+      background-color: #fef3c7;
+      color: #92400e;
+    }
+
+    .status-indicator.scanned {
+      background-color: #d1fae5;
+      color: #065f46;
+    }
+
+    .rfid-instructions {
+      background-color: #f1f5f9;
+      padding: 15px;
+      border-radius: 6px;
+      margin-top: 15px;
+    }
+
+    .rfid-instructions h3 {
+      margin-top: 0;
+      font-size: 1rem;
+    }
+
+    .rfid-instructions ol {
+      margin: 10px 0;
+      padding-left: 20px;
+    }
+
+    .rfid-instructions li {
+      margin: 5px 0;
+      font-size: 0.9rem;
+    }
+
+    button:disabled {
+      opacity: 0.5;
+      cursor: not-allowed;
+    }
+  </style>
+
   <script src="../assets/js/api.js"></script>
   <script src="../assets/js/session.js"></script>
   <script src="../assets/js/utils.js"></script>
 
   <script>
     let teacherSubjects = [];
+    let currentStudentId = null;
+    let scannedUid = null;
+    let rfidPollingInterval = null;
 
     function requireTeacherPage() {
       const profile = getProfile();
@@ -170,7 +356,7 @@
       if (!students || students.length === 0) {
         table.innerHTML = `
           <tr>
-            <td colspan="7">No students found</td>
+            <td colspan="8">No students found</td>
           </tr>
         `;
         return;
@@ -193,6 +379,7 @@
             <td>${student.year_level || ''}</td>
             <td>${student.section || ''}</td>
             <td>${profile.email || ''}</td>
+            <td>${student.parent_phone || ''}</td>
 
             <td>
               ${
@@ -244,9 +431,10 @@
         middle_name: document.getElementById('middle_name').value.trim(),
         last_name: document.getElementById('last_name').value.trim(),
         email: document.getElementById('email').value.trim(),
+        parent_phone_number: document.getElementById('parent_phone_number').value.trim(),
         year_level: document.getElementById('year_level').value.trim(),
         section: document.getElementById('section').value.trim()
-      };
+      };  
 
       if (!payload.student_no || !payload.first_name || !payload.last_name) {
         showMessage('messageBox', 'Student number, first name and last name are required', 'error');
@@ -264,6 +452,7 @@
         document.getElementById('middle_name').value = '';
         document.getElementById('last_name').value = '';
         document.getElementById('email').value = '';
+        document.getElementById('parent_phone_number').value = '';
         document.getElementById('year_level').value = '';
         document.getElementById('section').value = '';
 
@@ -277,28 +466,98 @@
     }
 
     async function assignRFID(studentId) {
+      currentStudentId = studentId;
+      scannedUid = null;
+      
+      document.getElementById('rfidScannerInput').value = '';
+      document.getElementById('assignRfidBtn').disabled = true;
+      document.getElementById('rfidModalMessage').textContent = 'Scan the RFID card on your ESP32 device...';
+      document.getElementById('scannerStatus').innerHTML = '<span class="status-indicator waiting">⏳ Waiting for scan on device...</span>';
+      document.getElementById('rfidModal').style.display = 'flex';
+      
+      // Start polling for RFID scans from device
+      startRfidPolling();
+    }
 
-      const uid = prompt('Scan or enter RFID UID');
+    function closeRfidModal() {
+      document.getElementById('rfidModal').style.display = 'none';
+      currentStudentId = null;
+      scannedUid = null;
+      
+      // Stop polling
+      stopRfidPolling();
+    }
 
-      if (!uid) return;
+    function startRfidPolling() {
+      stopRfidPolling();
+      
+      // Poll every 1 second for RFID scans
+      rfidPollingInterval = setInterval(async () => {
+        await checkForRfidScan();
+      }, 1000);
+    }
+
+    function stopRfidPolling() {
+      if (rfidPollingInterval) {
+        clearInterval(rfidPollingInterval);
+        rfidPollingInterval = null;
+      }
+    }
+
+    async function checkForRfidScan() {
+      try {
+        const result = await getRequest('/rfid/device/login-scan');
+        
+        if (result.data && result.data.uid && !result.data.used) {
+          processScannedUid(result.data.uid);
+          
+          // Consume the scan so it won't be read again
+          try {
+            await postRequest('/rfid/device/login-scan/consume', {});
+          } catch (consumeError) {
+            console.error('Failed to consume login scan:', consumeError);
+          }
+        }
+      } catch (error) {
+        console.error('Failed to check for RFID scan:', error);
+      }
+    }
+
+    function processScannedUid(uid) {
+      if (!uid || uid.length < 4) {
+        showMessage('messageBox', 'Invalid RFID UID. Please try again.', 'error');
+        return;
+      }
+
+      scannedUid = uid;
+      document.getElementById('rfidScannerInput').value = uid;
+      document.getElementById('assignRfidBtn').disabled = false;
+      document.getElementById('rfidModalMessage').textContent = 'RFID card scanned successfully!';
+      document.getElementById('scannerStatus').innerHTML = '<span class="status-indicator scanned">✅ Card scanned: ' + uid + '</span>';
+      
+      // Stop polling once we got a scan
+      stopRfidPolling();
+    }
+
+    async function confirmAssignRfid() {
+      if (!currentStudentId || !scannedUid) {
+        showMessage('messageBox', 'Please scan an RFID card first.', 'error');
+        return;
+      }
 
       const token = getAccessToken();
 
       try {
-
         const result = await postRequest('/rfid/students/assign', {
-          student_id: studentId,
-          uid: uid.trim()
+          student_id: currentStudentId,
+          uid: scannedUid
         }, token);
 
-        alert(result.message);
-
+        showMessage('messageBox', result.message, 'success');
+        closeRfidModal();
         loadStudents();
-
       } catch (error) {
-
-        alert(error.message || 'Failed to assign RFID');
-
+        showMessage('messageBox', error.message || 'Failed to assign student RFID.', 'error');
       }
     }
 
@@ -329,6 +588,14 @@
 
       }
     }
+
+    // Close modal when clicking outside
+    document.addEventListener('click', function(event) {
+      const modal = document.getElementById('rfidModal');
+      if (event.target === modal) {
+        closeRfidModal();
+      }
+    });
 
     async function initPage() {
 

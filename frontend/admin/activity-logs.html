@@ -1,0 +1,278 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Activity Logs - Admin</title>
+  <link rel="stylesheet" href="../assets/css/style.css" />
+</head>
+<body>
+  <div class="topbar">
+    <div class="topbar-inner">
+      <div class="brand">RFID Attendance System</div>
+      <div class="topbar-right">
+        <span id="adminName">Admin</span>
+        <button class="secondary small" onclick="goBack()">Back</button>
+      </div>
+    </div>
+  </div>
+
+  <div class="container">
+    <div class="page-header">
+      <div>
+        <h1>Activity Logs</h1>
+        <p class="page-subtitle">Monitor all system activities and user actions.</p>
+      </div>
+    </div>
+
+    <div class="card">
+      <h2>Filters</h2>
+      <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 15px; margin-bottom: 15px;">
+        <div>
+          <label for="filterUser">Search User</label>
+          <input type="text" id="filterUser" placeholder="First or Last Name" />
+        </div>
+
+        <div>
+          <label for="filterAction">Action Type</label>
+          <select id="filterAction">
+            <option value="">All Actions</option>
+          </select>
+        </div>
+
+        <div>
+          <label for="filterEntity">Entity Type</label>
+          <select id="filterEntity">
+            <option value="">All Entities</option>
+          </select>
+        </div>
+
+        <div>
+          <label for="filterDateFrom">Date From</label>
+          <input type="date" id="filterDateFrom" />
+        </div>
+
+        <div>
+          <label for="filterDateTo">Date To</label>
+          <input type="date" id="filterDateTo" />
+        </div>
+      </div>
+
+      <div class="button-row">
+        <button onclick="applyFilters()">Apply Filters</button>
+        <button class="secondary" onclick="clearFilters()">Clear Filters</button>
+        <button class="secondary" onclick="loadActivityLogs()">Refresh Logs</button>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="table-container">
+        <table>
+          <thead>
+            <tr>
+              <th>Timestamp</th>
+              <th>User</th>
+              <th>Action</th>
+              <th>Entity Type</th>
+              <th>Details</th>
+            </tr>
+          </thead>
+          <tbody id="logsTableBody">
+            <tr>
+              <td colspan="5">Loading activity logs...</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+
+  <script src="../assets/js/api.js"></script>
+  <script src="../assets/js/session.js"></script>
+  <script src="../assets/js/utils.js"></script>
+
+  <script>
+    let currentFilters = {};
+
+    function requireAdminPage() {
+      const profile = getProfile();
+
+      if (!profile || profile.role !== 'admin') {
+        window.location.href = '../login.html';
+        return null;
+      }
+
+      document.getElementById('adminName').textContent =
+        `${profile.first_name} ${profile.last_name}`;
+
+      return profile;
+    }
+
+    function goBack() {
+      window.location.href = 'dashboard.html';
+    }
+
+    function populateFilterOptions() {
+      const actionSelect = document.getElementById('filterAction');
+      const entitySelect = document.getElementById('filterEntity');
+
+      // Common action types
+      const actionTypes = [
+        'ATTENDANCE_SCAN',
+        'START_ATTENDANCE_SESSION',
+        'END_ATTENDANCE_SESSION',
+        'CREATE_TEACHER',
+        'CREATE_STUDENT',
+        'ASSIGN_RFID_CARD',
+        'LOGIN'
+      ];
+
+      actionTypes.forEach(action => {
+        const option = document.createElement('option');
+        option.value = action;
+        option.textContent = formatActionType(action);
+        actionSelect.appendChild(option);
+      });
+
+      // Common entity types
+      const entityTypes = [
+        'attendance_record',
+        'attendance_session',
+        'teacher',
+        'student',
+        'rfid_card',
+        'profile'
+      ];
+
+      entityTypes.forEach(entity => {
+        const option = document.createElement('option');
+        option.value = entity;
+        option.textContent = formatEntityType(entity);
+        entitySelect.appendChild(option);
+      });
+    }
+
+    function formatActionType(actionType) {
+      return actionType
+        .split('_')
+        .map(word => word.charAt(0).toUpperCase() + word.slice(1).toLowerCase())
+        .join(' ');
+    }
+
+    function formatEntityType(entityType) {
+      return entityType
+        .split('_')
+        .map(word => word.charAt(0).toUpperCase() + word.slice(1).toLowerCase())
+        .join(' ');
+    }
+
+    function formatDetails(details) {
+      if (!details) return '-';
+      
+      try {
+        const parsed = typeof details === 'string' ? JSON.parse(details) : details;
+        return JSON.stringify(parsed, null, 2);
+      } catch (e) {
+        return String(details).substring(0, 100);
+      }
+    }
+
+    function renderActivityLogs(logs) {
+      const tableBody = document.getElementById('logsTableBody');
+
+      if (!logs || logs.length === 0) {
+        tableBody.innerHTML = `
+          <tr>
+            <td colspan="5">No activity logs found.</td>
+          </tr>
+        `;
+        return;
+      }
+
+      tableBody.innerHTML = logs.map(log => {
+        const profile = log.profiles || {};
+        const fullName = `${profile.first_name || ''} ${profile.last_name || ''}`.trim() || 'Unknown';
+        const formattedAction = formatActionType(log.action_type);
+        const formattedEntity = formatEntityType(log.entity_type);
+        const timestamp = new Date(log.created_at).toLocaleString();
+
+        return `
+          <tr>
+            <td>${timestamp}</td>
+            <td>${fullName}</td>
+            <td><span class="badge">${formattedAction}</span></td>
+            <td>${formattedEntity}</td>
+            <td style="max-width: 300px; font-size: 0.85rem; color: #666;">${formatDetails(log.details)}</td>
+          </tr>
+        `;
+      }).join('');
+    }
+
+    async function loadActivityLogs(filters = {}) {
+      const token = getAccessToken();
+
+      try {
+        // Build query string from filters
+        const queryParams = new URLSearchParams();
+        
+        if (filters.user_search) queryParams.append('user_search', filters.user_search);
+        if (filters.action_type) queryParams.append('action_type', filters.action_type);
+        if (filters.entity_type) queryParams.append('entity_type', filters.entity_type);
+        if (filters.date_from) queryParams.append('date_from', filters.date_from);
+        if (filters.date_to) queryParams.append('date_to', filters.date_to);
+
+        const queryString = queryParams.toString();
+        const endpoint = `/activity-logs${queryString ? '?' + queryString : ''}`;
+
+        const result = await getRequest(endpoint, token);
+        renderActivityLogs(result.data || []);
+      } catch (error) {
+        console.error('Failed to load activity logs:', error);
+        const tableBody = document.getElementById('logsTableBody');
+        tableBody.innerHTML = `
+          <tr>
+            <td colspan="5" style="color: red;">Failed to load activity logs: ${error.message}</td>
+          </tr>
+        `;
+      }
+    }
+
+    function applyFilters() {
+      const userSearch = document.getElementById('filterUser').value.trim();
+      const actionType = document.getElementById('filterAction').value;
+      const entityType = document.getElementById('filterEntity').value;
+      const dateFrom = document.getElementById('filterDateFrom').value;
+      const dateTo = document.getElementById('filterDateTo').value;
+
+      currentFilters = {};
+
+      if (userSearch) currentFilters.user_search = userSearch;
+      if (actionType) currentFilters.action_type = actionType;
+      if (entityType) currentFilters.entity_type = entityType;
+      if (dateFrom) currentFilters.date_from = dateFrom;
+      if (dateTo) currentFilters.date_to = dateTo;
+
+      loadActivityLogs(currentFilters);
+    }
+
+    function clearFilters() {
+      document.getElementById('filterUser').value = '';
+      document.getElementById('filterAction').value = '';
+      document.getElementById('filterEntity').value = '';
+      document.getElementById('filterDateFrom').value = '';
+      document.getElementById('filterDateTo').value = '';
+
+      currentFilters = {};
+      loadActivityLogs();
+    }
+
+    async function initPage() {
+      requireAdminPage();
+      populateFilterOptions();
+      await loadActivityLogs();
+    }
+
+    initPage();
+  </script>
+</body>
+</html>

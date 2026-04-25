@@ -44,6 +44,7 @@
         <div class="button-row">
           <button onclick="startSession()">Start Session</button>
           <button class="secondary" onclick="goBack()">Back to Dashboard</button>
+          <button class="secondary" onclick="goToHistory()">Attendance History</button>
         </div>
 
         <div id="messageBox" class="message"></div>
@@ -130,6 +131,10 @@
       window.location.href = 'dashboard.html';
     }
 
+    function goToHistory() {
+      window.location.href = 'attendance-history.html';
+    }
+
     async function loadSubjectsForSelect() {
       const token = getAccessToken();
 
@@ -194,6 +199,8 @@
           </div>
         </div>
         <div class="button-row" style="margin-top: 14px;">
+          <button onclick="refreshDevice()">Refresh Device</button>
+          <button onclick="exportToExcel()" style="background-color: #28a745;">Export to Excel</button>
           <button onclick="endSession()">End Session</button>
         </div>
       `;
@@ -257,11 +264,80 @@
 
       try {
         const result = await postRequest(`/attendance/sessions/${activeSessionId}/end`, {}, token);
-        showMessage('messageBox', result.message, 'success');
+        showMessage('messageBox', result.message + ' Device will auto-refresh.', 'success');
         stopPolling();
         await loadActiveSession();
       } catch (error) {
         showMessage('messageBox', error.message || 'Failed to end session.', 'error');
+      }
+    }
+
+    async function refreshDevice() {
+      clearMessage('messageBox');
+
+      const token = getAccessToken();
+
+      if (!activeSessionId) {
+        showMessage('messageBox', 'No active session to refresh device for.', 'error');
+        return;
+      }
+
+      try {
+        const result = await postRequest('/rfid/device/refresh', {}, token);
+        showMessage('messageBox', result.message || 'Device refresh signal sent!', 'success');
+      } catch (error) {
+        showMessage('messageBox', error.message || 'Failed to send refresh signal to device.', 'error');
+      }
+    }
+
+    async function exportToExcel() {
+      clearMessage('messageBox');
+
+      const token = getAccessToken();
+
+      if (!activeSessionId) {
+        showMessage('messageBox', 'No active session to export.', 'error');
+        return;
+      }
+
+      try {
+        // Use fetch to handle blob response
+        const response = await fetch(`${API_BASE_URL}/attendance/sessions/${activeSessionId}/export`, {
+          method: 'GET',
+          headers: {
+            'Authorization': `Bearer ${token}`
+          }
+        });
+
+        if (!response.ok) {
+          const error = await response.json();
+          throw new Error(error.message || 'Failed to export');
+        }
+
+        // Get filename from content-disposition header
+        const contentDisposition = response.headers.get('content-disposition');
+        let filename = 'attendance_records.xlsx';
+        if (contentDisposition) {
+          const filenameMatch = contentDisposition.match(/filename="? (.+?)"?$/);
+          if (filenameMatch && filenameMatch[1]) {
+            filename = decodeURIComponent(filenameMatch[1]);
+          }
+        }
+
+        // Create blob and download
+        const blob = await response.blob();
+        const url = window.URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = filename;
+        document.body.appendChild(a);
+        a.click();
+        window.URL.revokeObjectURL(url);
+        document.body.removeChild(a);
+
+        showMessage('messageBox', 'Attendance records exported successfully!', 'success');
+      } catch (error) {
+        showMessage('messageBox', error.message || 'Failed to export attendance records.', 'error');
       }
     }
 
