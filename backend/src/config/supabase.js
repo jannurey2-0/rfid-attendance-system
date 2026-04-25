@@ -9,11 +9,23 @@ if (!supabaseUrl || !supabaseAnonKey || !supabaseServiceRoleKey) {
   throw new Error('Missing Supabase environment variables.');
 }
 
-// Public-style client if needed for user-session-based logic
-const supabase = createClient(supabaseUrl, supabaseAnonKey);
+// Optimized client without session persistence (server-side)
+const supabase = createClient(supabaseUrl, supabaseAnonKey, {
+  auth: {
+    persistSession: false,
+    autoRefreshToken: false,
+  },
+});
 
-// Admin/server client for protected backend operations
-const supabaseAdmin = createClient(supabaseUrl, supabaseServiceRoleKey);
+const supabaseAdmin = createClient(supabaseUrl, supabaseServiceRoleKey, {
+  auth: {
+    persistSession: false,
+    autoRefreshToken: false,
+  },
+  db: {
+    schema: 'public',
+  },
+});
 
 module.exports = {
   supabase,
